@@ -1,6 +1,8 @@
 """
 An agent plays a role like a brain of a solver.
-It can act and react 
+It can `act` and `react` according to the observation of environment.
+    `act`: generate action to affect environment
+    `react`: literally, agent do things after receiving feedback from environment
 """
 import logging
 import numpy as np
