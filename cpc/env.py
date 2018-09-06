@@ -1,3 +1,6 @@
+"""
+Enviroment of problem to be solved.
+"""
 import gym
 
 __all__ = ['CartPoleEnv', 'AdvancedCartPoleEnv']
@@ -10,6 +13,9 @@ class CartPoleEnv(object):
 
 
 class AdvancedCartPoleEnv(object):
+    """
+    Providing continous action_space.
+    """
     @staticmethod
     def make():
         raise NotImplementedError

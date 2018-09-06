@@ -1,36 +1,118 @@
 import numpy as np
-from .agent import DQNAgent
+from gym import Env as GymEnv
+from .agent import BasicAgent, DQNAgent
 
-__all__ = ['CartPoleSolver']
+__all__ = ['BasicSolver', 'CartPoleSolver']
 
 
-class CartPoleSolver(object):
+def skip(func=None, flag=True):
+    def outter_wrapper(func):
+        def wrapper(*args, **kwargs):
+            return None if flag else func(*args, **kwargs)
+        return wrapper
+
+    if func:
+        # used as a pure decorator
+        # (first parameter `func` will be automatically passed in)
+        # e.g.
+        # ```
+        # @skip
+        # def foo():
+        #     print('foo')
+        # ```
+        return outter_wrapper(func)
+    else:
+        # used as a decorator with parameter
+        # e.g.
+        # ```
+        # @skip(flag=True)
+        # def foo():
+        #     print('foo')
+        # ```
+        return outter_wrapper
+
+
+class BasicSolver(object):
     def __init__(self, env=None, agent=None, 
-                 populating_episodes=50,
-                 training_episodes=50,
-                 testing_episodes=10,
-                 max_steps = 200,
-                 render_when_populating=False,
-                 render_when_training=False,
-                 render_when_testing=True):
+                 skip_pretraining=False,
+                 skip_training=False,
+                 skip_solving=False):
         self.env = env
         self.agent = agent
-        self.populating_episodes = agent.batch_size  # rewrite this
+        try:
+            self._check()
+        except:
+            raise
+
+        # method rebinding (make each stage skippable)
+        self.pretrain = skip(flag=skip_pretraining)(self.pretrain)
+        self.train = skip(flag=skip_training)(self.train)
+        self.solve = skip(flag=skip_solving)(self.solve)
+
+    def _check(self):
+        if not isinstance(self.env, GymEnv):
+            raise TypeError('`env` should be an instance of `gym.Env`.')
+        if not isinstance(self.agent, BasicAgent):
+            raise TypeError('`agent` should be an instance of `BasicAgent`.')
+
+    def pretrain(self):
+        """
+        Pretraining stage. Can be used to prepare training data.
+        This method should be implemented in derived class.
+        """
+        pass
+
+    def train(self):
+        """
+        Training stage. Can be used to train your model.
+        This method should be implemented in derived class.
+        """
+        pass
+
+    def solve(self):
+        """
+        Solving stage.
+        This method should be implemented in derived class.
+        """
+        pass
+
+    def run(self):
+        self.pretrain()
+        self.train()
+        self.solve()
+
+    def terminate(self):
+        self.env.close()
+
+
+class CartPoleSolver(BasicSolver):
+    def __init__(self, 
+                 pretrain_episodes=50,
+                 training_episodes=50,
+                 solving_episodes=10,
+                 max_steps = 200,
+                 render_when_pretraining=False,
+                 render_when_training=False,
+                 render_when_sovling=True,
+                 **kwargs):
+        super(CartPoleSolver, self).__init__(**kwargs)
+
+        self.pretrain_episodes = pretrain_episodes
         self.training_episodes = training_episodes
-        self.testing_episodes = testing_episodes
+        self.solving_episodes = solving_episodes
         self.max_steps = max_steps
 
         # flags control for rendering
-        self.rwp = render_when_populating
-        self.rwtr = render_when_training
-        self.rwte = render_when_testing
+        self.rwp = render_when_pretraining
+        self.rwt = render_when_training
+        self.rws = render_when_sovling
 
     def pretrain(self):
         # initialize environment and agent
         state = self.env.reset()
         self.agent.initialize(state)
 
-        for i in range(self.populating_episodes):
+        for i in range(self.pretrain_episodes):
             if self.rwp:
                 self.env.render()
 
@@ -41,23 +123,22 @@ class CartPoleSolver(object):
                 self.env.reset()
                 state = np.zeros(state.shape)   # indicating the end of an episode
             self.agent.pretraining_react(state, reward)
+        self.env.close()
 
-    def train_model(self):
+    def train(self):
         # initialize environment and agent
         state = self.env.reset()
         self.agent.initialize(state)
-        step = 0
 
         for i in range(self.training_episodes):
             total_reward = 0
             done = False
 
             while not done:
-                step += 1
-                if self.rwtr:
+                if self.rwt:
                     self.env.render()
 
-                action = self.agent.training_act(state, step)
+                action = self.agent.training_act(state)
                 state, reward, done, info = self.env.step(action)
                 total_reward += reward
 
@@ -68,21 +149,21 @@ class CartPoleSolver(object):
                     state = np.zeros(state.shape)   # indicating the end of an episode
                 self.agent.training_react(state, reward)
         self.agent.save_model()
+        self.env.close()
 
-
-    def test_model(self):
+    def solve(self):
         state = self.env.reset()
         self.agent.initialize(state)
 
-        for i in range(self.testing_episodes):
+        for i in range(self.solving_episodes):
             total_reward = 0
             done = False
 
             while not done:
-                if self.rwte:
+                if self.rws:
                     self.env.render()
 
-                action = self.agent.testing_act(state)
+                action = self.agent.solving_act(state)
                 state, reward, done, info = self.env.step(action)
                 total_reward += reward
 
@@ -90,12 +171,5 @@ class CartPoleSolver(object):
                     print('Episode: {}'.format(i),
                           'Total reward: {}'.format(total_reward))
                     self.env.reset()
-                self.agent.testing_react(state, reward)
-
-    def run(self):
-        self.pretrain()
-        self.train_model()
-        self.test_model()
-
-    def terminate(self):
+                self.agent.solving_react(state, reward)
         self.env.close()

@@ -29,3 +29,6 @@ test.py
 
 # saved model
 *.h5
+
+# image source
+image_source/
